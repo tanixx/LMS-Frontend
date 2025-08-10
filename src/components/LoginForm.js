@@ -22,6 +22,9 @@ function LoginForm() {
       const token = response.data.token;
       localStorage.setItem("token", token);
 
+      // Print token to console
+      console.log("Login token:", token);
+
       const userResponse = await api.get("/user/me", {
         headers: { Authorization: `Bearer ${token}` }
       });
