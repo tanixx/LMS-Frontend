@@ -12,19 +12,10 @@ function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [newBook, setNewBook] = useState({ title: '', author: '', isbn: '', category: '', availableCopies: 1 });
-  //book categories 
-  const bookCategories = [
-    "Science",
-    "Technology",
-    "Engineering",
-    "Mathematics",
-    "Literature",
-    "History",
-    "Arts",
-    "Comics",
-    "Biography",
-    "Other"
-  ];
+  const [newBookCategory, setNewBookCategory] = useState('');
+
+  // Remove hardcoded bookCategories and use fetched categories from backend
+  const [bookCategories, setBookCategories] = useState([]);
 
   const [newUser, setNewUser] = useState({ username: '', password: '' }); 
   const token = localStorage.getItem("token");
@@ -211,6 +202,15 @@ function AdminDashboard() {
     }).catch(err => console.error('Failed to fetch transactions:', err));
   };
 
+  // Fetch categories from backend
+  const fetchCategories = () => {
+    axios.get('http://localhost:8080/api/books/category', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => setBookCategories(res.data || []))
+      .catch(err => console.error('Failed to fetch categories:', err));
+  };
+
   // CRUD handlers
   const handleAddBook = () => {
     if (
@@ -336,13 +336,13 @@ function AdminDashboard() {
     }, 3000);
   };
 
-  const handleReturnBook = (id) => {
-    axios.put(`http://localhost:8080/api/transactions/return/${id}`, {}, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(() => fetchTransactions()) 
-      .catch(err => alert(`Failed to return book: ${err.response?.data || err.message}`));
-  };
+const handleReturnBook = (id) => {
+  axios.put(`http://localhost:8080/api/transactions/return/${id}`, null, {
+    headers: { Authorization: `Bearer ${token}` }
+  })
+    .then(() => fetchTransactions())
+    .catch(err => alert(`Failed to return book: ${err.response?.data || err.message}`));
+};
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -383,8 +383,69 @@ function AdminDashboard() {
     fetchRequests();
     fetchMembers();
     fetchTransactions();
+    fetchCategories(); // Fetch categories on mount
   // eslint-disable-next-line
   }, [navigate, token, currentPage, searchQuery, categoryFilter, memberPage, memberSearchQuery, txnPage, txnSearchQuery]);
+
+  // Responsive styles using CSS-in-JS
+  const responsiveStyles = `
+    @media (max-width: 900px) {
+      .admin-main {
+        margin-left: 0 !important;
+        padding: 16px !important;
+      }
+      .admin-sidebar {
+        position: static !important;
+        width: 100% !important;
+        min-height: unset !important;
+        flex-direction: row !important;
+        padding: 10px 0 !important;
+        justify-content: space-between !important;
+        z-index: 1 !important;
+      }
+      .admin-sidebar button {
+        font-size: 14px !important;
+        padding: 10px !important;
+        width: auto !important;
+        margin: 0 4px !important;
+      }
+      .admin-section {
+        padding: 16px !important;
+        min-width: unset !important;
+      }
+      .admin-table th, .admin-table td {
+        padding: 8px !important;
+        font-size: 13px !important;
+      }
+      .admin-table {
+        font-size: 13px !important;
+        overflow-x: auto !important;
+        display: block !important;
+      }
+    }
+    @media (max-width: 600px) {
+      .admin-main {
+        padding: 8px !important;
+      }
+      .admin-section {
+        padding: 8px !important;
+      }
+      .admin-heading {
+        font-size: 18px !important;
+      }
+      .admin-table th, .admin-table td {
+        font-size: 12px !important;
+        padding: 6px !important;
+      }
+    }
+  `;
+
+  useEffect(() => {
+    const styleTag = document.createElement('style');
+    styleTag.innerHTML = responsiveStyles;
+    document.head.appendChild(styleTag);
+    return () => { document.head.removeChild(styleTag); };
+  }, []);
 
   // Sidebar button helper
   const sidebarButton = (tab, label) => (
@@ -396,10 +457,26 @@ function AdminDashboard() {
     </button>
   );
 
+  const handleAddBookCategory = () => {
+    const cat = newBookCategory.trim();
+    if (!cat) {
+      setMessage("Category name cannot be empty.");
+      return;
+    }
+    if (bookCategories.map(c => c.toLowerCase()).includes(cat.toLowerCase())) {
+      setMessage("Category already exists.");
+      return;
+    }
+    // Optionally, send to backend if you want to persist new categories
+    setBookCategories([...bookCategories, cat]);
+    setNewBookCategory('');
+    setMessage("Category added successfully.");
+  };
+
   return (
     <div>
       {/* Sidebar */}
-      <div style={styles.sidebar}>
+      <div className="admin-sidebar" style={styles.sidebar}>
         <h2 style={{ marginBottom: '40px', fontSize: '22px', letterSpacing: '1px' }}>Admin Panel</h2>
         {sidebarButton('books', 'Books')}
         {sidebarButton('requests', 'Requests')}
@@ -425,15 +502,15 @@ function AdminDashboard() {
       </div>
 
       {/* Main Content */}
-      <div style={styles.main}>
+      <div className="admin-main" style={styles.main}>
         <h1 style={{ marginBottom: '30px', color: '#22223b' }}>Admin Dashboard</h1>
 
         {/* Books Tab */}
         {activeTab === 'books' && (
           <>
             <div style={styles.container}>
-              <section style={styles.section}>
-                <h3 style={styles.heading}>Add New Book</h3>
+              <section className="admin-section" style={styles.section}>
+                <h3 className="admin-heading" style={styles.heading}>Add New Book</h3>
                 <input
                   style={styles.input}
                   placeholder="Title"
@@ -462,6 +539,21 @@ function AdminDashboard() {
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+                  <input
+                    style={styles.input}
+                    placeholder="Add new category"
+                    value={newBookCategory}
+                    onChange={e => setNewBookCategory(e.target.value)}
+                  />
+                  <button
+                    style={{ ...styles.button, padding: '8px 16px', fontSize: '15px' }}
+                    type="button"
+                    onClick={handleAddBookCategory}
+                  >
+                    Add Category
+                  </button>
+                </div>
                 <input
                   style={styles.input}
                   type="number"
@@ -471,9 +563,10 @@ function AdminDashboard() {
                   onChange={(e) => setNewBook({ ...newBook, availableCopies: Number(e.target.value) })}
                 />
                 <button style={styles.button} onClick={handleAddBook}>Add Book</button>
+                {message && <div style={styles.message}>{message}</div>}
               </section>
             </div>
-            <section style={{ marginTop: "30px" }}>
+            <section className="admin-section" style={{ marginTop: "30px" }}>
               <h3>All Books (Page {currentPage + 1})</h3>
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
                 <input
@@ -511,7 +604,7 @@ function AdminDashboard() {
                 </button>
               </div>
               {books.length === 0 ? <p>No books available.</p> :
-                <table style={styles.table}>
+                <table className="admin-table" style={styles.table}>
                   <thead>
                     <tr>
                       <th style={styles.th}>Book ID</th>
@@ -570,12 +663,12 @@ function AdminDashboard() {
 
         {/* Requests Tab */}
         {activeTab === 'requests' && (
-          <section style={{ marginTop: "10px" }}>
+          <section className="admin-section" style={{ marginTop: "10px" }}>
             <h3>Pending Book Requests</h3>
             {requests.length === 0 ? (
               <p>No pending requests.</p>
             ) : (
-              <table style={styles.table}>
+              <table className="admin-table" style={styles.table}>
                 <thead>
                   <tr>
                     <th style={styles.th}>Title</th>
@@ -610,8 +703,8 @@ function AdminDashboard() {
         {activeTab === 'members' && (
           <>
             <div style={styles.container}>
-              <section style={styles.section}>
-                <h3 style={styles.heading}>Add New User</h3>
+              <section className="admin-section" style={styles.section}>
+                <h3 className="admin-heading" style={styles.heading}>Add New User</h3>
                 <input style={styles.input} placeholder="Username" value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value })} />
                 <input style={styles.input} placeholder="Password" type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} />
                 <button style={styles.button} onClick={handleAddUser}>Add User</button>
@@ -623,10 +716,10 @@ function AdminDashboard() {
               value={memberSearchQuery}
               onChange={(e) => setMemberSearchQuery(e.target.value)}
             />
-            <section style={{ marginTop: "10px" }}>
+            <section className="admin-section" style={{ marginTop: "10px" }}>
               <h3>All Members</h3>
               {members.length === 0 ? <p>No members found.</p> :
-                <table style={styles.table}>
+                <table className="admin-table" style={styles.table}>
                   <thead>
                     <tr style={{ backgroundColor: '#f2f2f2' }}>
                       <th style={styles.th}>Member ID</th>
@@ -668,8 +761,8 @@ function AdminDashboard() {
         {activeTab === 'transactions' && (
           <>
             <div style={styles.container}>
-              <section style={styles.section}>
-                <h3 style={styles.heading}>Add New Transaction</h3>
+              <section className="admin-section" style={styles.section}>
+                <h3 className="admin-heading" style={styles.heading}>Add New Transaction</h3>
                 <input
                   style={styles.input}
                   placeholder="Member ID"
@@ -703,12 +796,12 @@ function AdminDashboard() {
               value={txnSearchQuery}
               onChange={(e) => setTxnSearchQuery(e.target.value)}
             />
-            <section style={{ marginTop: "10px" }}>
+            <section className="admin-section" style={{ marginTop: "10px" }}>
               <h3>All Transactions</h3>
               {transactions.length === 0 ? (
                 <p>No transactions found.</p>
               ) : (
-                <table style={styles.table}>
+                <table className="admin-table" style={styles.table}>
                   <thead style={{ backgroundColor: '#f2f2f2' }}>
                     <tr>
                       <th style={styles.th}>ID</th>

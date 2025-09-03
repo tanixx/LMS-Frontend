@@ -1,4 +1,6 @@
 import axios from 'axios';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable"; // <-- use named import
 import { useEffect, useState } from 'react';
 
 function MemberDashboard() {
@@ -24,7 +26,8 @@ function MemberDashboard() {
   const [sortBy, setSortBy] = useState('title');
   const [sortOrder, setSortOrder] = useState('asc');
   const [message, setMessage] = useState('');
-  const [messageType, setMessageType] = useState('info'); // 'error' or 'success'
+  const [messageType, setMessageType] = useState('info'); 
+  const [newCategory, setNewCategory] = useState('');
 
   const token = localStorage.getItem("token");
 
@@ -42,6 +45,7 @@ function MemberDashboard() {
       left: 0,
       top: 0,
       zIndex: 2,
+      transition: 'width 0.3s',
     },
     sidebarButton: (tab) => ({
       width: '90%',
@@ -62,7 +66,8 @@ function MemberDashboard() {
       padding: '40px 30px',
       background: '#f8f9fa',
       minHeight: '100vh',
-      fontFamily: 'Arial, sans-serif'
+      fontFamily: 'Arial, sans-serif',
+      transition: 'margin-left 0.3s',
     },
     container: {
       display: 'flex',
@@ -92,7 +97,9 @@ function MemberDashboard() {
       padding: '10px 14px',
       borderRadius: '6px',
       border: '1px solid #ccc',
-      fontSize: '16px'
+      fontSize: '16px',
+      width: '100%',
+      boxSizing: 'border-box'
     },
     button: {
       backgroundColor: '#007bff',
@@ -102,7 +109,9 @@ function MemberDashboard() {
       fontWeight: 'bold',
       border: 'none',
       borderRadius: '6px',
-      cursor: 'pointer'
+      cursor: 'pointer',
+      width: '100%',
+      boxSizing: 'border-box'
     },
     table: {
       width: '100%',
@@ -112,7 +121,8 @@ function MemberDashboard() {
       borderRadius: '12px',
       boxShadow: '0 2px 12px rgba(0,0,0,0.07)',
       overflow: 'hidden',
-      marginTop: '15px'
+      marginTop: '15px',
+      fontSize: '15px'
     },
     th: {
       background: '#f4f6fb',
@@ -135,19 +145,8 @@ function MemberDashboard() {
     }
   };
 
-  const bookCategories = [
-    "Science",
-    "Technology",
-    "Engineering",
-    "Mathematics",
-    "Literature",
-    "History",
-    "Arts",
-    "Comics",
-    "Biography",
-    "Other"
-  ];
-
+  const [bookCategories, setBookCategories] = useState([]);
+   
   // Fetch functions
   const fetchMemberProfile = async () => {
     try {
@@ -213,17 +212,23 @@ function MemberDashboard() {
   useEffect(() => { fetchBooks(); }, [currentPage, searchQuery, sortBy, sortOrder]);
   useEffect(() => { if (memberProfile?.id) fetchRequests(); }, [memberProfile]);
   useEffect(() => { if (memberProfile?.id) fetchTransactions(); }, [memberProfile]);
+  useEffect(() => {
+    // Fetch categories from backend when component mounts
+    axios.get('http://localhost:8080/api/books/category', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => setBookCategories(res.data || []))
+      .catch(err => console.error('Failed to fetch categories:', err));
+  }, [token]);
 
   // Handlers
   const handleUpdateProfile = async () => {
-    if (memberProfile?.isProfileUpdated) {
-      showMessage("Profile can only be updated once.", "error");
-      return;
-    }
     try {
-      const res = await axios.put("http://localhost:8080/api/members/me", form, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await axios.post(
+        "http://localhost:8080/api/members/me/create",
+        form,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       setMemberProfile({ ...res.data, isProfileUpdated: true });
       showMessage("Profile updated successfully.", "success");
     } catch (err) {
@@ -294,9 +299,85 @@ function MemberDashboard() {
     }
   };
 
+  const getRowStyleByStatus = (status) => {
+    switch (status) {
+      case "ISSUED":
+        return { backgroundColor: '#f9da72ff' }; // Yellow
+      case "RETURNED":
+        return { backgroundColor: '#76fd95ff' }; // Green
+      case "OVERDUE":
+        return { backgroundColor: '#f79ca3ff' }; // Red
+      default:
+        return {};
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     window.location.href = "/";
+  };
+
+  const handleAddCategory = () => {
+    const cat = newCategory.trim();
+    if (!cat) {
+      showMessage("Category name cannot be empty.", "error");
+      return;
+    }
+    if (bookCategories.map(c => c.toLowerCase()).includes(cat.toLowerCase())) {
+      showMessage("Category already exists.", "error");
+      return;
+    }
+    setBookCategories([...bookCategories, cat]);
+    setNewCategory('');
+    showMessage("Category added successfully.", "success");
+  };
+
+  const handleDownloadTransactionsPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(10); // Set font size for all text to 10
+    doc.text("Transaction History Report", 14, 14); // Move title up and keep it small
+
+    const tableColumn = [
+      "Book ID",
+      "Title",
+      "Author",
+      "ISBN",
+      "Category",
+      "Borrow Date",
+      "Due Date",
+      "Return Date",
+      "Status",
+      "Fine"
+    ];
+
+    const tableRows = transactions.map(transaction => {
+      const book = transaction.book;
+      const borrowDate = new Date(transaction.borrowDate).toLocaleDateString();
+      const dueDate = new Date(transaction.dueDate).toLocaleDateString();
+      const returnDate = transaction.returnDate ? new Date(transaction.returnDate).toLocaleDateString() : "Not returned";
+      return [
+        book.id,
+        book.title,
+        book.author,
+        book.isbn,
+        book.category,
+        borrowDate,
+        dueDate,
+        returnDate,
+        transaction.status,
+        transaction.fine
+      ];
+    });
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 20, // Start table closer to the top
+      styles: { fontSize: 8 }, // Make table font even smaller if needed
+      headStyles: { fontSize: 9 }, // Slightly larger for header
+    });
+
+    doc.save("transaction_history.pdf");
   };
 
   // Sidebar button helper
@@ -320,7 +401,7 @@ function MemberDashboard() {
   return (
     <div>
       {/* Sidebar */}
-      <div style={styles.sidebar}>
+      <div className="dashboard-sidebar" style={styles.sidebar}>
         <h2 style={{ marginBottom: '40px', fontSize: '22px', letterSpacing: '1px' }}>Student Panel</h2>
         {sidebarButton('profile', 'Profile')}
         {sidebarButton('password', 'Change Password')}
@@ -346,7 +427,7 @@ function MemberDashboard() {
       </div>
 
       {/* Main Content */}
-      <div style={styles.main}>
+      <div className="dashboard-main" style={styles.main}>
         <h1 style={{ marginBottom: '30px', color: '#22223b' }}>Student Dashboard</h1>
 
         {/* Message Bar */}
@@ -383,8 +464,8 @@ function MemberDashboard() {
 
         {/* Profile Tab */}
         {activeTab === 'profile' && (
-          <section style={styles.section}>
-            <h3 style={styles.heading}>Member Information</h3>
+          <section className="dashboard-section" style={styles.section}>
+            <h3 className="dashboard-heading" style={styles.heading}>Member Information</h3>
             {memberProfile === null ? (
               <>
                 <label style={{ fontWeight: 500, marginBottom: 4 }}>Name</label>
@@ -403,14 +484,27 @@ function MemberDashboard() {
                   <strong>Name:</strong> {memberProfile.name}
                 </div>
                 <div style={{ marginBottom: 10 }}>
-                  <strong>Email:</strong> {memberProfile.email}
+                  <strong>Email:</strong>
+                  <input
+                    type="email"
+                    value={form.email}
+                    style={{ ...styles.input, marginLeft: 10, width: 250 }}
+                    onChange={e => setForm({ ...form, email: e.target.value })}
+                  />
                 </div>
                 <div style={{ marginBottom: 10 }}>
-                  <strong>Phone:</strong> {memberProfile.phone}
+                  <strong>Phone:</strong>
+                  <input
+                    type="text"
+                    value={form.phone}
+                    style={{ ...styles.input, marginLeft: 10, width: 180 }}
+                    onChange={e => setForm({ ...form, phone: e.target.value })}
+                  />
                 </div>
                 <div style={{ marginBottom: 10 }}>
                   <strong>Student ID:</strong> {memberProfile.studentId}
                 </div>
+                <button onClick={handleUpdateProfile} style={styles.button}>Save Changes</button>
               </>
             )}
           </section>
@@ -487,6 +581,21 @@ function MemberDashboard() {
             <button onClick={handleRequest} style={styles.button}>
               Request
             </button>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '10px' }}>
+              <input
+                style={styles.input}
+                placeholder="Add new category"
+                value={newCategory}
+                onChange={e => setNewCategory(e.target.value)}
+              />
+              <button
+                style={{ ...styles.button, padding: '8px 16px', fontSize: '15px' }}
+                type="button"
+                onClick={handleAddCategory}
+              >
+                Add Category
+              </button>
+            </div>
             <h3 style={{ marginTop: '30px' }}>My Requests</h3>
             <table style={styles.table}>
               <thead>
@@ -515,6 +624,12 @@ function MemberDashboard() {
         {activeTab === 'transactions' && (
           <section style={styles.section}>
             <h3 style={styles.heading}>My Transactions</h3>
+            <button
+              style={{ ...styles.button, marginBottom: 16, width: "auto", maxWidth: 220 }}
+              onClick={handleDownloadTransactionsPDF}
+            >
+              Download PDF Report
+            </button>
             <table style={styles.table}>
               <thead>
                 <tr>
@@ -537,7 +652,7 @@ function MemberDashboard() {
                   const dueDate = new Date(transaction.dueDate).toLocaleDateString();
                   const returnDate = transaction.returnDate ? new Date(transaction.returnDate).toLocaleDateString() : "Not returned";
                   return (
-                    <tr key={transaction.id}>
+                    <tr key={transaction.id} style={getRowStyleByStatus(transaction.status)}>
                       <td style={styles.td}>{book.id}</td>
                       <td style={styles.td}>{book.title}</td>
                       <td style={styles.td}>{book.author}</td>
@@ -609,24 +724,30 @@ function MemberDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {books.map((book, idx) => (
-                    <tr
-                      key={book.id}
-                      style={{
-                        ...styles.trHover,
-                        background: idx % 2 === 0 ? '#fafbfc' : '#fff'
-                      }}
-                      onMouseOver={e => (e.currentTarget.style.background = '#f0f4fa')}
-                      onMouseOut={e => (e.currentTarget.style.background = idx % 2 === 0 ? '#fafbfc' : '#fff')}
-                    >
-                      <td style={styles.td}>{book.id}</td>
-                      <td style={styles.td}>{book.title}</td>
-                      <td style={styles.td}>{book.author}</td>
-                      <td style={styles.td}>{book.isbn}</td>
-                      <td style={styles.td}>{book.category}</td>
-                      <td style={styles.td}>{book.availableCopies}</td>
-                    </tr>
-                  ))}
+                  {[...books]
+                    .sort((a, b) => {
+                      if (a[sortBy] < b[sortBy]) return sortOrder === 'asc' ? -1 : 1;
+                      if (a[sortBy] > b[sortBy]) return sortOrder === 'asc' ? 1 : -1;
+                      return 0;
+                    })
+                    .map((book, idx) => (
+                      <tr
+                        key={book.id}
+                        style={{
+                          ...styles.trHover,
+                          background: idx % 2 === 0 ? '#fafbfc' : '#fff'
+                        }}
+                        onMouseOver={e => (e.currentTarget.style.background = '#f0f4fa')}
+                        onMouseOut={e => (e.currentTarget.style.background = idx % 2 === 0 ? '#fafbfc' : '#fff')}
+                      >
+                        <td style={styles.td}>{book.id}</td>
+                        <td style={styles.td}>{book.title}</td>
+                        <td style={styles.td}>{book.author}</td>
+                        <td style={styles.td}>{book.isbn}</td>
+                        <td style={styles.td}>{book.category}</td>
+                        <td style={styles.td}>{book.availableCopies}</td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             )}

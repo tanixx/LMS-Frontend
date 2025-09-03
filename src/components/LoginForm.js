@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
@@ -47,6 +47,38 @@ function LoginForm() {
     }
   };
 
+  // Responsive styles using CSS-in-JS
+  const responsiveStyles = `
+    @media (max-width: 600px) {
+      .login-container {
+        padding: 0 !important;
+        height: auto !important;
+        min-height: 100vh !important;
+      }
+      .login-form {
+        width: 95vw !important;
+        min-width: unset !important;
+        padding: 18px !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+      }
+      .login-heading {
+        font-size: 20px !important;
+      }
+      .login-title {
+        font-size: 20px !important;
+        top: 18px !important;
+      }
+    }
+  `;
+
+  useEffect(() => {
+    const styleTag = document.createElement('style');
+    styleTag.innerHTML = responsiveStyles;
+    document.head.appendChild(styleTag);
+    return () => { document.head.removeChild(styleTag); };
+  }, []);
+
   // Inline styles
   const containerStyle = {
     display: 'flex',
@@ -54,6 +86,7 @@ function LoginForm() {
     justifyContent: 'center',
     alignItems: 'center',
     background: '#f2f2f2',
+    padding: 0,
   };
 
   const formStyle = {
@@ -63,6 +96,7 @@ function LoginForm() {
     boxShadow: '0 0 15px rgba(0,0,0,0.1)',
     width: '300px',
     textAlign: 'center',
+    minWidth: '260px',
   };
 
   const inputStyle = {
@@ -90,44 +124,43 @@ function LoginForm() {
   };
 
   return (
-  <div style={containerStyle}>
-    <h1 style={{ 
-      position: 'absolute',
-      top: '50px',
-      textAlign: 'center',
-      width: '100%',
-      fontSize: '28px',
-      fontWeight: 'bold',
-      color: '#333'
-    }}>
-      Welcome to Digital Library Portal
-    </h1>
+    <div className="login-container" style={containerStyle}>
+      <h1 className="login-title" style={{
+        position: 'absolute',
+        top: '50px',
+        textAlign: 'center',
+        width: '100%',
+        fontSize: '28px',
+        fontWeight: 'bold',
+        color: '#333'
+      }}>
+        Welcome to Digital Library Portal
+      </h1>
 
-    <form style={formStyle} onSubmit={handleLogin}>
-      <h2 style={headingStyle}>Login</h2>
-      <input
-        autoFocus
-        value={username}
-        onChange={e => setUsername(e.target.value)}
-        placeholder="Username"
-        required
-        style={inputStyle}
-      />
-      <input
-        value={password}
-        type="password"
-        onChange={e => setPassword(e.target.value)}
-        placeholder="Password"
-        required
-        style={inputStyle}
-      />
-      <button type="submit" disabled={loading} style={buttonStyle}>
-        {loading ? "Logging in..." : "Login"}
-      </button>
-    </form>
-  </div>
-);
-
+      <form className="login-form" style={formStyle} onSubmit={handleLogin}>
+        <h2 className="login-heading" style={headingStyle}>Login</h2>
+        <input
+          autoFocus
+          value={username}
+          onChange={e => setUsername(e.target.value)}
+          placeholder="Username"
+          required
+          style={inputStyle}
+        />
+        <input
+          value={password}
+          type="password"
+          onChange={e => setPassword(e.target.value)}
+          placeholder="Password"
+          required
+          style={inputStyle}
+        />
+        <button type="submit" disabled={loading} style={buttonStyle}>
+          {loading ? "Logging in..." : "Login"}
+        </button>
+      </form>
+    </div>
+  );
 }
 
 export default LoginForm;
